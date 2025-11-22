@@ -1,57 +1,55 @@
-name: CI - Postgres service (simple)
+name: Postgres Container
 
 on:
-push:
-branches: [ main ]
-workflow_dispatch:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
-container-job:
-runs-on: ubuntu-latest
-# job container: change or remove if you don't want a containerized job
-container: node:20-bullseye
-services:
-postgres:
-image: postgres:16
-env:
-POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-# optional: POSTGRES_USER: ci_user
-# optional: POSTGRES_DB: ci_db
-options: >-
---health-cmd pg_isready
---health-interval 10s
---health-timeout 5s
---health-retries 5
+  container-job:
+    runs-on: ubuntu-latest
+    # job container: change or remove if you don't want a containerized job
+    container: node:20-bullseye
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          # optional: POSTGRES_USER: ci_user
+          # optional: POSTGRES_DB: ci_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
 
-```
-steps:
-  - name: Checkout
-    uses: actions/checkout@v5
+      - name: Wait a few seconds for network settle
+        run: sleep 2
 
-  - name: Wait a few seconds for network settle
-    run: sleep 2
+      - name: Install psql client
+        run: |
+          apt-get update
+          apt-get install -y postgresql-client
 
-  - name: Install psql client
-    run: |
-      apt-get update
-      apt-get install -y postgresql-client
-
-  - name: Check Postgres is reachable and print version
-    env:
-      PGHOST: postgres
-      PGPORT: 5432
-      PGUSER: postgres
-      PGPASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-      PGDATABASE: postgres
-    run: |
-      # Wait until pg_isready returns success, up to ~30s (safety)
-      for i in {1..6}; do
-        pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" && break
-        echo "Waiting for postgres... ($i/6)"
-        sleep 5
-      done
-      echo "Connecting to Postgres at $PGHOST:$PGPORT"
-      PGPASSWORD="$PGPASSWORD" psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT version();" 
-      # Example: run your tests instead of the SELECT above
-      # node ./test/integration-test.js
-```
+      - name: Check Postgres is reachable and print version
+        env:
+          PGHOST: postgres
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          PGDATABASE: postgres
+        run: |
+          # Wait until pg_isready returns success, up to ~30s (safety)
+          for i in {1..6}; do
+            pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" && break
+            echo "Waiting for postgres... ($i/6)"
+            sleep 5
+          done
+          echo "Connecting to Postgres at $PGHOST:$PGPORT"
+          PGPASSWORD="$PGPASSWORD" psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT version();" 
+          # Example: run your tests instead of the SELECT above
+          # node ./test/integration-test.js
