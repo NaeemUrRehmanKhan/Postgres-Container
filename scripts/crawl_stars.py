@@ -91,7 +91,8 @@ def fetch_for_query(search_query, max_records=1000):
             repo = edge["node"]
             rows.append((repo["id"], repo["nameWithOwner"], repo["stargazerCount"]))
 
-        insert_into_db(rows)
+        if rows:
+            insert_into_db(rows)
 
         fetched += len(rows)
         cursor = data["pageInfo"]["endCursor"]
@@ -105,36 +106,66 @@ def fetch_for_query(search_query, max_records=1000):
     return fetched
 
 
+def generate_queries():
+    """Generate queries split by creation date to get 100k+ repos"""
+    queries = []
+    
+    # Split by year and month for maximum coverage
+    years = range(2008, 2025)  # GitHub launched in 2008
+    months = range(1, 13)
+    
+    for year in years:
+        for month in months:
+            # Calculate the last day of the month
+            if month == 12:
+                next_month = 1
+                next_year = year + 1
+            else:
+                next_month = month + 1
+                next_year = year
+            
+            start_date = f"{year}-{month:02d}-01"
+            
+            # Create date range for the entire month
+            if month in [1, 3, 5, 7, 8, 10, 12]:
+                end_date = f"{year}-{month:02d}-31"
+            elif month in [4, 6, 9, 11]:
+                end_date = f"{year}-{month:02d}-30"
+            else:  # February
+                if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0):
+                    end_date = f"{year}-{month:02d}-29"
+                else:
+                    end_date = f"{year}-{month:02d}-28"
+            
+            queries.append(f"created:{start_date}..{end_date}")
+    
+    return queries
+
+
 def main():
-    # Define star ranges to break the 1000-result limit
-    star_ranges = [
-        "stars:100000..*",      # 100k+ stars
-        "stars:50000..99999",   # 50k-100k stars
-        "stars:20000..49999",   # 20k-50k stars
-        "stars:10000..19999",   # 10k-20k stars
-        "stars:5000..9999",     # 5k-10k stars
-        "stars:2000..4999",     # 2k-5k stars
-        "stars:1000..1999",     # 1k-2k stars
-        "stars:500..999",       # 500-1k stars
-        "stars:200..499",       # 200-500 stars
-        "stars:100..199",       # 100-200 stars
-        "stars:50..99",         # 50-100 stars
-        "stars:20..49",         # 20-50 stars
-        "stars:10..19",         # 10-20 stars
-        "stars:5..9",           # 5-10 stars
-        "stars:1..4",           # 1-5 stars
-    ]
-
+    queries = generate_queries()
+    
+    print(f"Generated {len(queries)} queries to fetch repositories\n")
+    
     total_fetched = 0
+    TARGET = 100000
 
-    for search_query in star_ranges:
-        print(f"\nFetching repositories: {search_query}")
+    for idx, search_query in enumerate(queries, 1):
+        if total_fetched >= TARGET:
+            print(f"\nTarget reached! ({total_fetched:,} records)")
+            break
+            
+        print(f"\n[{idx}/{len(queries)}] Fetching: {search_query}")
         count = fetch_for_query(search_query, max_records=1000)
         total_fetched += count
         
-        print(f"Total fetched across all queries: {total_fetched}\n")
+        print(f"Total fetched so far: {total_fetched:,}")
+        
+        if total_fetched >= TARGET:
+            print(f"\n Target reached! ({total_fetched:,} records)")
+            break
 
-    print(f"✓ Completed! Total records: {total_fetched}")
+    print(f"\n✓ Completed! Total records: {total_fetched:,}")
 
 
 if __name__ == "__main__":
